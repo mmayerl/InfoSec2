@@ -104,7 +104,6 @@ def sample_random_correct(x_test, y_test, model, n):
         if res == x[1]:
             samples.append(res)
 
-
     correct = filter(lambda x: model.predict(x[0]) == x[1], zip(x_test, y_test))
     return random.sample(correct, n)
 
