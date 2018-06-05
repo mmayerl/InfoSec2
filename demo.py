@@ -12,6 +12,7 @@
 
 import argparse
 import pickle
+import random
 import numpy as np
 import theano
 from keras.models import Sequential
@@ -25,7 +26,11 @@ parser = argparse.ArgumentParser(description="Demo script for the InfoSec2 prose
 parser.add_argument("-t", "--train", action="store_true", help="Train neural network models on MNIST training data and save them to disk.");
 parser.add_argument("-e", "--evaluate", action="store_true", help="Evaluate the given neural network models on untampered MNIST test data.");
 parser.add_argument("-d1", "--demo_single_pixel", action="store_true", help="Demo the single pixel perturbations.");
+parser.add_argument("-d2", "--demo_universal", action="store_true", help="Demo universal perturbations.");
+
 # ToDo: Add other perturbation demo options
+
+parser.add_argument("-n", "--num_samples", default=100, help="The number of samples that we attempt to fool.");
 
 parser.add_argument("-o1", "--out_cnn1", default="cnn1.pickle", help="Output path for the first CNN model.");
 parser.add_argument("-o2", "--out_cnn2", default="cnn2.pickle", help="Output path for the second CNN model.");
@@ -38,18 +43,19 @@ args = parser.parse_args()
 # *********************** Train ***********************
 def train_models(x_train, y_train):
     # Build first model (CNN)
+    # Source: ########
     print("Training first CNN model ...")
-    model_cnn = Sequential()
-    model_cnn.add(Conv2D(32, (3, 3), activation="relu", input_shape=(1,28,28)))
-    model_cnn.add(Conv2D(32, (3, 3), activation="relu"))
-    model_cnn.add(MaxPooling2D(pool_size=(2, 2)))
-    model_cnn.add(Dropout(0.25))
-    model_cnn.add(Flatten())
-    model_cnn.add(Dense(128, activation="relu"))
-    model_cnn.add(Dropout(0.5))
-    model_cnn.add(Dense(10, activation="softmax"))
-    model_cnn.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
-    model_cnn.fit(x_train, y_train, batch_size=32, epochs=10, verbose=1)
+    model_cnn1 = Sequential()
+    model_cnn1.add(Conv2D(32, (3, 3), activation="relu", input_shape=(1,28,28)))
+    model_cnn1.add(Conv2D(32, (3, 3), activation="relu"))
+    model_cnn1.add(MaxPooling2D(pool_size=(2, 2)))
+    model_cnn1.add(Dropout(0.25))
+    model_cnn1.add(Flatten())
+    model_cnn1.add(Dense(128, activation="relu"))
+    model_cnn1.add(Dropout(0.5))
+    model_cnn1.add(Dense(10, activation="softmax"))
+    model_cnn1.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
+    model_cnn1.fit(x_train, y_train, batch_size=32, epochs=10, verbose=1)
 
     #Build second model (other CNN)
     print("Training second CNN model ...")
@@ -88,6 +94,24 @@ def evaluate_models(x_test, y_test):
     score_cnn2 = model_cnn2.evaluate(x_test, y_test)
     print("CNN 2 score: ", score_cnn2)
     
+
+# *********************** Perturbation helpers ***********************
+def sample_random_correct(x_test, y_test, model, n):
+    # Samples n random correctly classified samples sunter model.
+    samples = []
+    for x in zip(x_test, y_test):
+        res = model.predict(x[0])
+        if res == x[1]:
+            samples.append(res)
+
+
+    correct = filter(lambda x: model.predict(x[0]) == x[1], zip(x_test, y_test))
+    return random.sample(correct, n)
+
+
+# *********************** Single pixel perturbations ***********************
+def demo_single_pixel(x_test, y_test):
+    pass
 
 # Import MNIST data as provided by Keras and reshape for Theano backend
 # We need this for all actions the script can perform, so we always do this
