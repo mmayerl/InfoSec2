@@ -27,11 +27,11 @@ parser.add_argument("-e", "--evaluate", action="store_true", help="Evaluate the 
 parser.add_argument("-d1", "--demo_single_pixel", action="store_true", help="Demo the single pixel perturbations.");
 # ToDo: Add other perturbation demo options
 
-parser.add_argument("-o1", "--out_cnn", default="cnn1.pickle", help="Output path for the first CNN model.");
-parser.add_argument("-o2", "--out_cnnn", default="cnn2.pickle", help="Output path for the second CNN model.");
+parser.add_argument("-o1", "--out_cnn1", default="cnn1.pickle", help="Output path for the first CNN model.");
+parser.add_argument("-o2", "--out_cnn2", default="cnn2.pickle", help="Output path for the second CNN model.");
 
-parser.add_argument("-i1", "--in_cnn", default="cnn1.pickle", help="Input path for the first CNN model.");
-parser.add_argument("-i2", "--in_cnn", default="cnn2.pickle", help="Input path for the second CNN model.");
+parser.add_argument("-i1", "--in_cnn1", default="cnn1.pickle", help="Input path for the first CNN model.");
+parser.add_argument("-i2", "--in_cnn2", default="cnn2.pickle", help="Input path for the second CNN model.");
 
 args = parser.parse_args()
 
