@@ -105,7 +105,7 @@ y_test = np_utils.to_categorical(y_test, 10)
 
 #Transfer control according to the CLI arguments given
 if args.train:
-train_models(x_train, y_train)
+    train_models(x_train, y_train)
 
 if args.evaluate:
     evaluate_models(x_test, y_test)
