@@ -11,11 +11,10 @@
 # and image_data_format needs to be set to channels_first.
 
 import argparse
-import pickle
 import random
 import numpy as np
 import theano
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 from keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D
 from keras.utils import np_utils
 from keras.datasets import mnist
@@ -32,11 +31,11 @@ parser.add_argument("-d2", "--demo_universal", action="store_true", help="Demo u
 
 parser.add_argument("-n", "--num_samples", default=100, help="The number of samples that we attempt to fool.");
 
-parser.add_argument("-o1", "--out_cnn1", default="cnn1.pickle", help="Output path for the first CNN model.");
-parser.add_argument("-o2", "--out_cnn2", default="cnn2.pickle", help="Output path for the second CNN model.");
+parser.add_argument("-o1", "--out_cnn1", default="cnn1.hdf5", help="Output path for the first CNN model.");
+parser.add_argument("-o2", "--out_cnn2", default="cnn2.hdf5", help="Output path for the second CNN model.");
 
-parser.add_argument("-i1", "--in_cnn1", default="cnn1.pickle", help="Input path for the first CNN model.");
-parser.add_argument("-i2", "--in_cnn2", default="cnn2.pickle", help="Input path for the second CNN model.");
+parser.add_argument("-i1", "--in_cnn1", default="cnn1.hdf5", help="Input path for the first CNN model.");
+parser.add_argument("-i2", "--in_cnn2", default="cnn2.hdf5", help="Input path for the second CNN model.");
 
 args = parser.parse_args()
 
@@ -71,9 +70,9 @@ def train_models(x_train, y_train):
     # Save models
     print("Saving models:")
     print("   CNN 1 to ", args.out_cnn1)
-    pickle.dump(model_cnn1, open(args.out_cnn1, "wb"))
+    model_cnn1.save(args.out_cnn1)
     print("   CNN 2 to ", args.out_cnn2)
-    pickle.dump(model_cnn2, open(args.out_cnn2, "wb"))
+    model_cnn2.save(args.out_cnn2)
     
 
 # *********************** Evaluate ***********************
@@ -81,9 +80,9 @@ def evaluate_models(x_test, y_test):
     # Load models
     print("Loading models:")
     print("   CNN 1 from ", args.in_cnn1)
-    model_cnn1 = pickle.load(open(args.in_cnn1, "rb"))
+    model_cnn1 = load_model(args.in_cnn1)
     print("   CNN 2 from ", args.in_cnn2)
-    model_cnn2 = pickle.load(open(args.in_cnn2, "rb"))
+    model_cnn2 = load_model(args.in_cnn2) 
 
     #Evaluate models
     print("Evaluating CNN 1 ...")
@@ -97,20 +96,36 @@ def evaluate_models(x_test, y_test):
 
 # *********************** Perturbation helpers ***********************
 def sample_random_correct(x_test, y_test, model, n):
-    # Samples n random correctly classified samples sunter model.
+    # Samples n random correctly classified samples under model.
     samples = []
     for x in zip(x_test, y_test):
-        res = model.predict(x[0])
+        img = np.expand_dims(x[0], axis=0)
+        res = model.predict(img)
         if res == x[1]:
             samples.append(res)
 
-    correct = filter(lambda x: model.predict(x[0]) == x[1], zip(x_test, y_test))
-    return random.sample(correct, n)
+    return samples
+    #correct = filter(lambda x: model.predict(x[0]) == x[1], zip(x_test, y_test))
+    #return random.sample(correct, n)
 
 
 # *********************** Single pixel perturbations ***********************
 def demo_single_pixel(x_test, y_test):
-    pass
+    # Step 1: Load models
+    print("Loading models ...")
+    models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
+
+    for model in models:
+        # Step 2: Get random correctly classified samples
+        samples = sample_random_correct(x_test, y_test, model, args.num_samples)
+
+        # Step 3: Try to perturb a single pixel in every sample to fool the model
+
+        # Step 4: Calculate the fooling rate
+
+
+
+    
 
 # Import MNIST data as provided by Keras and reshape for Theano backend
 # We need this for all actions the script can perform, so we always do this
@@ -134,3 +149,5 @@ if args.evaluate:
     evaluate_models(x_test, y_test)
 
 #ToDo: Add perturbation demos
+if args.demo_single_pixel:
+    demo_single_pixel(x_test, y_test)
