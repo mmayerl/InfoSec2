@@ -95,37 +95,75 @@ def evaluate_models(x_test, y_test):
     
 
 # *********************** Perturbation helpers ***********************
-def sample_random_correct(x_test, y_test, model, n):
-    # Samples n random correctly classified samples under model.
+def get_n_correct(x_test, y_test, model, n):
     samples = []
     for x in zip(x_test, y_test):
         img = np.expand_dims(x[0], axis=0)
-        res = model.predict(img)
-        if res == x[1]:
-            samples.append(res)
+        res = model.predict_classes(img)
+        if x[1][res[0]] == 1:
+            samples.append(img)
+
+        if len(samples) == n:
+            break
 
     return samples
-    #correct = filter(lambda x: model.predict(x[0]) == x[1], zip(x_test, y_test))
-    #return random.sample(correct, n)
 
+def calculate_fooling_rate(x_test, y_test, samples, model):
+    pass
 
 # *********************** Single pixel perturbations ***********************
+def perturb_single_pixel(sample, model):
+    # We try to perturb every pixel in the given image. 
+    # Once we find a pixel whose value we can change to
+    # misclassify the image, we are done.
+    # the perturbation we try is either setting 
+    # the given pixel to 1 or to 0.
+
+    correct_class = model.predict_classes(sample)
+
+    for x in range(28):
+        for y in range(28):
+            img = np.copy(sample)
+
+            # Set to 1 - missclassify?
+            if sample[0, 0, y][x] != 1.0:
+                img[0, 0, y][x] = 1.0
+                pred_class =  model.predict_classes(img)
+                if pred_class != correct_class:
+                    return (1, img)
+
+            # Set to 0 - missclassify?
+            if sample[0, 0, y][x] != 0.0:
+                img[0, 0, y][x] = 0.0
+                pred_class =  model.predict_classes(img)
+                if pred_class != correct_class:
+                    return (1, img)
+
+    #We did't manage to find a perturbation
+    return (0, sample)
+
 def demo_single_pixel(x_test, y_test):
     # Step 1: Load models
     print("Loading models ...")
     models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
+    successful_perturbs = 0.0
 
     for model in models:
         # Step 2: Get random correctly classified samples
-        samples = sample_random_correct(x_test, y_test, model, args.num_samples)
+        print("Drawing samples for correctly classified instances ...")
+        samples = get_n_correct(x_test, y_test, model, args.num_samples)
 
         # Step 3: Try to perturb a single pixel in every sample to fool the model
+        print("Attempting to perturb those samples ...")
+        for i in range(len(samples)):
+            print("   Sample ", i)
+            success, samples[i] = perturb_single_pixel(samples[i], model)
+            successful_perturbs += success    
 
         # Step 4: Calculate the fooling rate
-
-
-
-    
+        fool_rate = successful_perturbs / args.num_samples
+        print("Achieved fooling rate: ", fool_rate)
+ 
 
 # Import MNIST data as provided by Keras and reshape for Theano backend
 # We need this for all actions the script can perform, so we always do this
