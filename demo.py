@@ -25,7 +25,9 @@ parser = argparse.ArgumentParser(description="Demo script for the InfoSec2 prose
 parser.add_argument("-t", "--train", action="store_true", help="Train neural network models on MNIST training data and save them to disk.");
 parser.add_argument("-e", "--evaluate", action="store_true", help="Evaluate the given neural network models on untampered MNIST test data.");
 parser.add_argument("-d1", "--demo_single_pixel", action="store_true", help="Demo the single pixel perturbations.");
-parser.add_argument("-d2", "--demo_universal", action="store_true", help="Demo universal perturbations.");
+parser.add_argument("-d2", "--demo_all_pixel", action="store_true", help="Demo the constant all pixel perturbations.");
+parser.add_argument("-d3", "--demo_gaussian", action="store_true", help="Demo the gaussian perturbations.");
+parser.add_argument("-d4", "--demo_universal", action="store_true", help="Demo universal perturbations.");
 
 # ToDo: Add other perturbation demo options
 
@@ -108,11 +110,32 @@ def get_n_correct(x_test, y_test, model, n):
 
     return samples
 
-def calculate_fooling_rate(x_test, y_test, samples, model):
-    pass
+
+def demo_perturbation(x_test, y_test, perturb_fn, data):
+    # Step 1: Load models
+    print("Loading models ...")
+    models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
+    successful_perturbs = 0.0
+
+    for model in models:
+        # Step 2: Get random correctly classified samples
+        print("Drawing samples for correctly classified instances ...")
+        samples = get_n_correct(x_test, y_test, model, args.num_samples)
+
+        # Step 3: Try to perturb a single pixel in every sample to fool the model
+        print("Attempting to perturb those samples ...")
+        for i in range(len(samples)):
+            print("   Sample ", i)
+            success, samples[i] = perturb_fn(samples[i], model, data)
+            successful_perturbs += success    
+
+        # Step 4: Calculate the fooling rate
+        fool_rate = successful_perturbs / args.num_samples
+        print("Achieved fooling rate: ", fool_rate)
+
 
 # *********************** Single pixel perturbations ***********************
-def perturb_single_pixel(sample, model):
+def perturb_single_pixel(sample, model, data):
     # We try to perturb every pixel in the given image. 
     # Once we find a pixel whose value we can change to
     # misclassify the image, we are done.
@@ -143,27 +166,43 @@ def perturb_single_pixel(sample, model):
     return (0, sample)
 
 def demo_single_pixel(x_test, y_test):
-    # Step 1: Load models
-    print("Loading models ...")
-    models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
-    successful_perturbs = 0.0
-
-    for model in models:
-        # Step 2: Get random correctly classified samples
-        print("Drawing samples for correctly classified instances ...")
-        samples = get_n_correct(x_test, y_test, model, args.num_samples)
-
-        # Step 3: Try to perturb a single pixel in every sample to fool the model
-        print("Attempting to perturb those samples ...")
-        for i in range(len(samples)):
-            print("   Sample ", i)
-            success, samples[i] = perturb_single_pixel(samples[i], model)
-            successful_perturbs += success    
-
-        # Step 4: Calculate the fooling rate
-        fool_rate = successful_perturbs / args.num_samples
-        print("Achieved fooling rate: ", fool_rate)
+    demo_perturbation(x_test, y_test, perturb_single_pixel, None)
  
+
+# *********************** All pixel perturbations ***********************
+def perturb_all_pixels(sample, model, data):
+    # We try to perturb all pixels in the given image. 
+    # We do this by adding a constant value to all pixels,
+    # clipped to [0, 1].
+
+    correct_class = model.predict_classes(sample)
+
+    for i in range(1, 25):
+        offset = i / 100.0
+
+        # Negative adjustment
+        img = np.copy(sample)
+        img -= offset
+        img = np.clip(img, 0.0, 1.0)
+
+        pred_class =  model.predict_classes(img)
+        if pred_class != correct_class:
+            return (1, img)
+
+        # Positive adjustment
+        img = np.copy(sample)
+        img += offset
+        img = np.clip(img, 0.0, 1.0)
+
+        pred_class =  model.predict_classes(img)
+        if pred_class != correct_class:
+            return (1, img)
+
+    return (0, sample)
+
+
+def demo_all_pixel(x_test, y_test):
+    demo_perturbation(x_test, y_test, perturb_all_pixels, None)
 
 # Import MNIST data as provided by Keras and reshape for Theano backend
 # We need this for all actions the script can perform, so we always do this
@@ -189,3 +228,6 @@ if args.evaluate:
 #ToDo: Add perturbation demos
 if args.demo_single_pixel:
     demo_single_pixel(x_test, y_test)
+
+if args.demo_all_pixel:
+    demo_all_pixel(x_test, y_test)
