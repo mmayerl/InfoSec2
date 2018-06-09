@@ -10,7 +10,7 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
-            "args": ["-d1"]
+            "args": ["-d3"]
         },
         {
             "name": "Python: Attach",

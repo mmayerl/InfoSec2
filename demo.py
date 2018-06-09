@@ -204,6 +204,29 @@ def perturb_all_pixels(sample, model, data):
 def demo_all_pixel(x_test, y_test):
     demo_perturbation(x_test, y_test, perturb_all_pixels, None)
 
+
+# *********************** Gaussian perturbations ***********************
+def perturb_gaussian(sample, model, data):
+    # We try to perturb all pixels in the given image with a 
+    # Gaussian perturbation.
+
+    correct_class = model.predict_classes(sample)
+
+    img = np.copy(sample)
+    img += data
+
+    pred_class =  model.predict_classes(img)
+    if pred_class != correct_class:
+        return (1, img)
+
+    return (0, sample)
+
+
+def demo_gaussian(x_test, y_test):
+    gaussian = np.random.normal(0, 0.1, size=(1, 1, 28, 28))
+    demo_perturbation(x_test, y_test, perturb_gaussian, gaussian)
+
+
 # Import MNIST data as provided by Keras and reshape for Theano backend
 # We need this for all actions the script can perform, so we always do this
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
@@ -225,9 +248,11 @@ if args.train:
 if args.evaluate:
     evaluate_models(x_test, y_test)
 
-#ToDo: Add perturbation demos
 if args.demo_single_pixel:
     demo_single_pixel(x_test, y_test)
 
 if args.demo_all_pixel:
     demo_all_pixel(x_test, y_test)
+
+if args.demo_gaussian:
+    demo_gaussian(x_test, y_test)
