@@ -18,8 +18,9 @@ from keras.models import Sequential, load_model
 from keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D
 from keras.utils import np_utils
 from keras.datasets import mnist
+from keras import backend as K
 import matplotlib.pyplot as plt
-from foolbox.models import TheanoModel
+from foolbox.models import KerasModel
 from foolbox.criteria import TargetClassProbability
 from foolbox.attacks import LBFGSAttack
 
@@ -130,14 +131,17 @@ def plot_adversarial_example(image, adversarial):
     plt.subplot(1, 3, 3)
     plt.imshow(adversarial - image)
 
+    plt.show()
 
-def demo_perturbation(x_test, y_test, perturb_fn, data, plot_sample=-1):
+
+def demo_perturbation(x_test, y_test, perturb_fn, data):
     # Step 1: Load models
     print("Loading models ...")
+    K.set_learning_phase(0) #set learning phase
     models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
-    successful_perturbs = 0.0
 
     for model in models:
+        successful_perturbs = 0.0
         # Step 2: Get random correctly classified samples
         print("Drawing samples for correctly classified instances ...")
         samples = get_n_correct(x_test, y_test, model, args.num_samples)
@@ -150,9 +154,9 @@ def demo_perturbation(x_test, y_test, perturb_fn, data, plot_sample=-1):
             success, adversarial[i] = perturb_fn(samples[i], model, data)
             successful_perturbs += success
 
-            # Plot this sample and adversarial image if plot sample param is set
-            if plot_sample == i:
-                plot_adversarial_example(samples[i], adversarial[i])
+            # Plot first successful example
+            if success == 1 and successful_perturbs == 1:
+                plot_adversarial_example(samples[i][0,0,:,:], adversarial[i][0,0,:,:])
 
         # Step 4: Calculate the fooling rate
         fool_rate = successful_perturbs / args.num_samples
@@ -259,7 +263,7 @@ def perturb_lbfgs(sample, model, data):
     # Based on the tutorial: https://foolbox.readthedocs.io/en/latest/user/tutorial.html
 
     # create model for foolbox
-    foolbox_model = TheanoModel(model.input, model.layers[-2].output, (0, 1), 10)
+    foolbox_model = KerasModel(model, (0.0 ,1.0))
 
     # get correct class
     correct_class = model.predict_classes(sample)
@@ -273,7 +277,11 @@ def perturb_lbfgs(sample, model, data):
     # create attack on model with given criterion
     attack = LBFGSAttack(foolbox_model, criterion)
 
+    #print(sample[0,:,:,:].shape)
+
     # generate adversarial example
+    # TODO somehow foolbox has a problem with our samples. when passing the sample it appends a dimension for some
+    # TODO reason. using sample[0,:,:,:] leads to an assertion fail.
     adversarial = attack(sample, label=correct_class)
 
     # get class of adversarial example
