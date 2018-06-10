@@ -137,7 +137,7 @@ def plot_adversarial_example(image, adversarial):
 def demo_perturbation(x_test, y_test, perturb_fn, data):
     # Step 1: Load models
     print("Loading models ...")
-    K.set_learning_phase(0) #set learning phase
+    K.set_learning_phase(0) # set phase to testing phase - needed for foolbox
     models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
 
     for model in models:
@@ -263,7 +263,7 @@ def perturb_lbfgs(sample, model, data):
     # Based on the tutorial: https://foolbox.readthedocs.io/en/latest/user/tutorial.html
 
     # create model for foolbox
-    foolbox_model = KerasModel(model, (0.0 ,1.0))
+    foolbox_model = KerasModel(model, (0.0 ,1.0), channel_axis=3)
 
     # get correct class
     correct_class = model.predict_classes(sample)
@@ -280,9 +280,15 @@ def perturb_lbfgs(sample, model, data):
     #print(sample[0,:,:,:].shape)
 
     # generate adversarial example
-    # TODO somehow foolbox has a problem with our samples. when passing the sample it appends a dimension for some
-    # TODO reason. using sample[0,:,:,:] leads to an assertion fail.
-    adversarial = attack(sample, label=correct_class)
+    # sample needs to be transformed from (batchsize, channels, rows, cols) format to (height, width, channels) for
+    # foolbox, but that leads to problems with the model
+    transformed_sample = sample[0,:,:,:] # remove batch size
+    transformed_sample = np.swapaxes(transformed_sample, 0, 1) # swap channels to axis 1
+    transformed_sample = np.swapaxes(transformed_sample, 1, 2) # swap channels to axis 2
+    # print(sample[0,:,:,:])
+    # print(transformed_sample)
+
+    adversarial = attack(transformed_sample, label=correct_class)
 
     # get class of adversarial example
     pred_class = model.predict_classes(adversarial)
@@ -293,9 +299,7 @@ def perturb_lbfgs(sample, model, data):
 
 
 def demo_lbfgs(x_test, y_test):
-    demo_perturbation(x_test, y_test, perturb_lbfgs, None, plot_sample=10)
-
-
+    demo_perturbation(x_test, y_test, perturb_lbfgs, None)
 
 
 # Import MNIST data as provided by Keras and reshape for Theano backend
