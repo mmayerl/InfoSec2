@@ -14,11 +14,17 @@ import argparse
 import random
 import numpy as np
 import theano
+import matplotlib.pyplot as plt
 from keras.models import Sequential, load_model
 from keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D
 from keras.utils import np_utils
 from keras.datasets import mnist
 from scipy.misc import imsave
+from keras import backend as K
+from foolbox.models import KerasModel
+from foolbox.criteria import TargetClassProbability
+from foolbox.attacks import LBFGSAttack
+
 
 # *********************** Parse CLI arguments ***********************
 parser = argparse.ArgumentParser(description="Demo script for the InfoSec2 proseminar of 2018 abount rebustness of neural networks.")
@@ -28,6 +34,7 @@ parser.add_argument("-d1", "--demo_single_pixel", action="store_true", help="Dem
 parser.add_argument("-d2", "--demo_all_pixel", action="store_true", help="Demo the constant all pixel perturbations.");
 parser.add_argument("-d3", "--demo_gaussian", action="store_true", help="Demo the gaussian perturbations.");
 parser.add_argument("-d4", "--demo_universal", action="store_true", help="Demo universal perturbations.");
+parser.add_argument("-d5", "--demo_lbfgs", action="store_true", help="Demo LBFGS attack (Szegedy et al. 2013).")
 
 # ToDo: Add other perturbation demo options
 
@@ -91,10 +98,12 @@ def evaluate_models(x_test, y_test):
     #Evaluate models
     print("Evaluating CNN 1 ...")
     score_cnn1 = model_cnn1.evaluate(x_test, y_test)
+    print("Metrics: ", model_cnn1.metrics_names)
     print("CNN 1 score: ", score_cnn1)
 
     print("Evaluating CNN 2 ...")    
     score_cnn2 = model_cnn2.evaluate(x_test, y_test)
+    print("Metrics: ", model_cnn2.metrics_names)
     print("CNN 2 score: ", score_cnn2)
     
 
@@ -118,16 +127,33 @@ def get_n_correct(x_test, y_test, model, n):
     return samples
 
 
+# Plot original image, adversarial example and perturbation
+# Taken from the foolbox tutorial: https://foolbox.readthedocs.io/en/latest/user/tutorial.html
+def plot_adversarial_example(image, adversarial):
+    plt.subplot(1, 3, 1)
+    plt.imshow(image)
+
+    plt.subplot(1, 3, 2)
+    plt.imshow(adversarial)
+
+    plt.subplot(1, 3, 3)
+    plt.imshow(adversarial - image)
+
+    plt.show()
+
+
 def demo_perturbation(x_test, y_test, perturb_fn, data):
     # Step 1: Load models
     print("Loading models ...")
+    K.set_learning_phase(0) # set phase to testing phase - needed for foolbox
     models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
-    successful_perturbs = 0.0
 
     for model in models:
+        successful_perturbs = 0.0
         # Step 2: Get random correctly classified samples
         print("Drawing samples for correctly classified instances ...")
         samples = get_n_correct(x_test, y_test, model, args.num_samples)
+        adversarial = samples[:]
 
         # Step 3: Try to perturb a single pixel in every sample to fool the model
         print("Attempting to perturb those samples ...")
@@ -136,11 +162,16 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
             success, perturbed_sample = perturb_fn(samples[i], model, data)
             successful_perturbs += success
 
+            # Save images
             if success == 1:
                 save_image(args.image_folder + str(i) + ".png", samples[i])
                 save_image(args.image_folder + str(i) + "_perturbed.png", perturbed_sample)
 
             samples[i] = perturbed_sample
+
+            # Plot first successful example
+            if success == 1 and successful_perturbs == 1:
+                plot_adversarial_example(samples[i][0,0,:,:], adversarial[i][0,0,:,:])
 
         # Step 4: Calculate the fooling rate
         fool_rate = successful_perturbs / args.num_samples
@@ -177,6 +208,7 @@ def perturb_single_pixel(sample, model, data):
 
     #We did't manage to find a perturbation
     return (0, sample)
+
 
 def demo_single_pixel(x_test, y_test):
     demo_perturbation(x_test, y_test, perturb_single_pixel, None)
@@ -240,6 +272,51 @@ def demo_gaussian(x_test, y_test):
     demo_perturbation(x_test, y_test, perturb_gaussian, gaussian)
 
 
+# *********************** LBFGS perturbations ***********************
+def perturb_lbfgs(sample, model, data):
+    # Perturb images using LBFGS attack by Szegedy et al. using the foolbox library
+    # Based on the tutorial: https://foolbox.readthedocs.io/en/latest/user/tutorial.html
+
+    # create model for foolbox
+    foolbox_model = KerasModel(model, (0.0 ,1.0), channel_axis=3)
+
+    # get correct class
+    correct_class = model.predict_classes(sample)
+
+    # set target to be next higher class (and 0 for 9)
+    target_class = (correct_class+1)%10
+
+    # set attack criterion to be 90% target class probability
+    criterion = TargetClassProbability(target_class, p=0.90)
+
+    # create attack on model with given criterion
+    attack = LBFGSAttack(foolbox_model, criterion)
+
+    #print(sample[0,:,:,:].shape)
+
+    # generate adversarial example
+    # sample needs to be transformed from (batchsize, channels, rows, cols) format to (height, width, channels) for
+    # foolbox, but that leads to problems with the model
+    transformed_sample = sample[0,:,:,:] # remove batch size
+    transformed_sample = np.swapaxes(transformed_sample, 0, 1) # swap channels to axis 1
+    transformed_sample = np.swapaxes(transformed_sample, 1, 2) # swap channels to axis 2
+    # print(sample[0,:,:,:])
+    # print(transformed_sample)
+
+    adversarial = attack(transformed_sample, label=correct_class)
+
+    # get class of adversarial example
+    pred_class = model.predict_classes(adversarial)
+    if pred_class != correct_class:
+        return (1, adversarial)
+
+    return (0, sample)
+
+
+def demo_lbfgs(x_test, y_test):
+    demo_perturbation(x_test, y_test, perturb_lbfgs, None)
+
+
 # Import MNIST data as provided by Keras and reshape for Theano backend
 # We need this for all actions the script can perform, so we always do this
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
@@ -269,3 +346,6 @@ if args.demo_all_pixel:
 
 if args.demo_gaussian:
     demo_gaussian(x_test, y_test)
+
+if args.demo_lbfgs:
+    demo_lbfgs(x_test, y_test)
