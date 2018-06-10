@@ -18,7 +18,7 @@ from keras.models import Sequential, load_model
 from keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D
 from keras.utils import np_utils
 from keras.datasets import mnist
-
+from scipy.misc import imsave
 
 # *********************** Parse CLI arguments ***********************
 parser = argparse.ArgumentParser(description="Demo script for the InfoSec2 proseminar of 2018 abount rebustness of neural networks.")
@@ -38,6 +38,8 @@ parser.add_argument("-o2", "--out_cnn2", default="cnn2.hdf5", help="Output path 
 
 parser.add_argument("-i1", "--in_cnn1", default="cnn1.hdf5", help="Input path for the first CNN model.");
 parser.add_argument("-i2", "--in_cnn2", default="cnn2.hdf5", help="Input path for the second CNN model.");
+
+parser.add_argument("-if", "--image_folder", default="images/", help="Output folder for the generated images.");
 
 args = parser.parse_args()
 
@@ -97,6 +99,11 @@ def evaluate_models(x_test, y_test):
     
 
 # *********************** Perturbation helpers ***********************
+def save_image(path, sample):
+    img = np.reshape(sample, (28, 28))
+    imsave(path, img)
+
+
 def get_n_correct(x_test, y_test, model, n):
     samples = []
     for x in zip(x_test, y_test):
@@ -126,8 +133,14 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
         print("Attempting to perturb those samples ...")
         for i in range(len(samples)):
             print("   Sample ", i)
-            success, samples[i] = perturb_fn(samples[i], model, data)
-            successful_perturbs += success    
+            success, perturbed_sample = perturb_fn(samples[i], model, data)
+            successful_perturbs += success
+
+            if success == 1:
+                save_image(args.image_folder + str(i) + ".png", samples[i])
+                save_image(args.image_folder + str(i) + "_perturbed.png", perturbed_sample)
+
+            samples[i] = perturbed_sample
 
         # Step 4: Calculate the fooling rate
         fool_rate = successful_perturbs / args.num_samples
