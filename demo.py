@@ -18,6 +18,10 @@ from keras.models import Sequential, load_model
 from keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D
 from keras.utils import np_utils
 from keras.datasets import mnist
+import matplotlib.pyplot as plt
+from foolbox.models import TheanoModel
+from foolbox.criteria import TargetClassProbability
+from foolbox.attacks import LBFGSAttack
 
 
 # *********************** Parse CLI arguments ***********************
@@ -28,6 +32,7 @@ parser.add_argument("-d1", "--demo_single_pixel", action="store_true", help="Dem
 parser.add_argument("-d2", "--demo_all_pixel", action="store_true", help="Demo the constant all pixel perturbations.");
 parser.add_argument("-d3", "--demo_gaussian", action="store_true", help="Demo the gaussian perturbations.");
 parser.add_argument("-d4", "--demo_universal", action="store_true", help="Demo universal perturbations.");
+parser.add_argument("-d5", "--demo_lbfgs", action="store_true", help="Demo LBFGS attack (Szegedy et al. 2013).")
 
 # ToDo: Add other perturbation demo options
 
@@ -89,10 +94,12 @@ def evaluate_models(x_test, y_test):
     #Evaluate models
     print("Evaluating CNN 1 ...")
     score_cnn1 = model_cnn1.evaluate(x_test, y_test)
+    print("Metrics: ", model_cnn1.metrics_names)
     print("CNN 1 score: ", score_cnn1)
 
     print("Evaluating CNN 2 ...")    
     score_cnn2 = model_cnn2.evaluate(x_test, y_test)
+    print("Metrics: ", model_cnn2.metrics_names)
     print("CNN 2 score: ", score_cnn2)
     
 
@@ -111,7 +118,20 @@ def get_n_correct(x_test, y_test, model, n):
     return samples
 
 
-def demo_perturbation(x_test, y_test, perturb_fn, data):
+# Plot original image, adversarial example and perturbation
+# Taken from the foolbox tutorial: https://foolbox.readthedocs.io/en/latest/user/tutorial.html
+def plot_adversarial_example(image, adversarial):
+    plt.subplot(1, 3, 1)
+    plt.imshow(image)
+
+    plt.subplot(1, 3, 2)
+    plt.imshow(adversarial)
+
+    plt.subplot(1, 3, 3)
+    plt.imshow(adversarial - image)
+
+
+def demo_perturbation(x_test, y_test, perturb_fn, data, plot_sample=-1):
     # Step 1: Load models
     print("Loading models ...")
     models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
@@ -121,13 +141,18 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
         # Step 2: Get random correctly classified samples
         print("Drawing samples for correctly classified instances ...")
         samples = get_n_correct(x_test, y_test, model, args.num_samples)
+        adversarial = samples[:]
 
         # Step 3: Try to perturb a single pixel in every sample to fool the model
         print("Attempting to perturb those samples ...")
         for i in range(len(samples)):
             print("   Sample ", i)
-            success, samples[i] = perturb_fn(samples[i], model, data)
-            successful_perturbs += success    
+            success, adversarial[i] = perturb_fn(samples[i], model, data)
+            successful_perturbs += success
+
+            # Plot this sample and adversarial image if plot sample param is set
+            if plot_sample == i:
+                plot_adversarial_example(samples[i], adversarial[i])
 
         # Step 4: Calculate the fooling rate
         fool_rate = successful_perturbs / args.num_samples
@@ -164,6 +189,7 @@ def perturb_single_pixel(sample, model, data):
 
     #We did't manage to find a perturbation
     return (0, sample)
+
 
 def demo_single_pixel(x_test, y_test):
     demo_perturbation(x_test, y_test, perturb_single_pixel, None)
@@ -227,6 +253,43 @@ def demo_gaussian(x_test, y_test):
     demo_perturbation(x_test, y_test, perturb_gaussian, gaussian)
 
 
+# *********************** LBFGS perturbations ***********************
+def perturb_lbfgs(sample, model, data):
+    # Perturb images using LBFGS attack by Szegedy et al. using the foolbox library
+    # Based on the tutorial: https://foolbox.readthedocs.io/en/latest/user/tutorial.html
+
+    # create model for foolbox
+    foolbox_model = TheanoModel(model.input, model.layers[-2].output, (0, 1), 10)
+
+    # get correct class
+    correct_class = model.predict_classes(sample)
+
+    # set target to be next higher class (and 0 for 9)
+    target_class = (correct_class+1)%10
+
+    # set attack criterion to be 90% target class probability
+    criterion = TargetClassProbability(target_class, p=0.90)
+
+    # create attack on model with given criterion
+    attack = LBFGSAttack(foolbox_model, criterion)
+
+    # generate adversarial example
+    adversarial = attack(sample, label=correct_class)
+
+    # get class of adversarial example
+    pred_class = model.predict_classes(adversarial)
+    if pred_class != correct_class:
+        return (1, adversarial)
+
+    return (0, sample)
+
+
+def demo_lbfgs(x_test, y_test):
+    demo_perturbation(x_test, y_test, perturb_lbfgs, None, plot_sample=10)
+
+
+
+
 # Import MNIST data as provided by Keras and reshape for Theano backend
 # We need this for all actions the script can perform, so we always do this
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
@@ -256,3 +319,6 @@ if args.demo_all_pixel:
 
 if args.demo_gaussian:
     demo_gaussian(x_test, y_test)
+
+if args.demo_lbfgs:
+    demo_lbfgs(x_test, y_test)
