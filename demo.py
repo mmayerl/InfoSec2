@@ -12,7 +12,9 @@
 
 import argparse
 import random
+import math
 import numpy as np
+from scipy.optimize import minimize, Bounds
 import theano
 from keras.models import Sequential, load_model
 from keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D
@@ -34,6 +36,7 @@ parser.add_argument("-d2", "--demo_all_pixel", action="store_true", help="Demo t
 parser.add_argument("-d3", "--demo_gaussian", action="store_true", help="Demo the gaussian perturbations.");
 parser.add_argument("-d4", "--demo_universal", action="store_true", help="Demo universal perturbations.");
 parser.add_argument("-d5", "--demo_lbfgs", action="store_true", help="Demo LBFGS attack (Szegedy et al. 2013).")
+parser.add_argument("-d6", "--demo_adversarial", action="store_true", help="Demo simple adversarial attack (Berkeley Tutorial).")
 
 # ToDo: Add other perturbation demo options
 
@@ -302,6 +305,51 @@ def demo_lbfgs(x_test, y_test):
     demo_perturbation(x_test, y_test, perturb_lbfgs, None)
 
 
+# *********************** Adversarial perturbations ***********************
+def adv_cost_function(perturbation, sample, y_goal, model):
+    # cost function from https://ml.berkeley.edu/blog/2018/01/10/adversarial-examples/
+
+    # reshape input matrix since scipy flattens it
+    perturbation = perturbation.reshape((1,1,28,28))
+
+    # try to minimize the distance between the goal class and the class of the sample plus perturbation
+    # TODO maybe use -0.5 to 0.5 for random so the -0.5 here is not necessary
+    return (1/2)*(y_goal**2)-(model.predict_classes(sample + (perturbation-0.5))**2)
+
+def perturb_adversarial(sample, model, data):
+    # Perturb images using an attack based on the description at https://ml.berkeley.edu/blog/2018/01/10/adversarial-examples/
+
+    # get correct class
+    correct_class = model.predict_classes(sample)
+
+    # set target to be next higher class (and 0 for 9)
+    target_class = (correct_class+5)%10
+
+    # minimize cost
+    start = np.random.normal(.5, .25, (1,1,28,28))
+    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='Nelder-Mead', options={'disp': True})
+
+    adversarial = sample + minimized.x.reshape((1,1,28,28))
+
+    # use this to plot all generated examples (debugging)
+    # plot_adversarial_example(sample[0,0,:,:], adversarial[0,0,:,:])
+
+    # get class of adversarial example
+    pred_class = model.predict_classes(adversarial)
+
+    # print original and detected class
+    print("{} -> {}".format(correct_class, pred_class))
+    
+    if pred_class != correct_class:
+        return (1, adversarial)
+
+    return (0, sample)
+
+
+def demo_adversarial(x_test, y_test):
+    demo_perturbation(x_test, y_test, perturb_adversarial, None)
+
+
 # Import MNIST data as provided by Keras and reshape for Theano backend
 # We need this for all actions the script can perform, so we always do this
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
@@ -334,3 +382,6 @@ if args.demo_gaussian:
 
 if args.demo_lbfgs:
     demo_lbfgs(x_test, y_test)
+
+if args.demo_adversarial:
+    demo_adversarial(x_test, y_test)
