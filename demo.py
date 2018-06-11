@@ -12,7 +12,9 @@
 
 import argparse
 import random
+import math
 import numpy as np
+from scipy.optimize import minimize, Bounds
 import theano
 import matplotlib.pyplot as plt
 from keras.models import Sequential, load_model
@@ -21,9 +23,11 @@ from keras.utils import np_utils
 from keras.datasets import mnist
 from scipy.misc import imsave
 from keras import backend as K
-from foolbox.models import KerasModel
+import matplotlib.pyplot as plt
+from foolbox.models import TheanoModel, KerasModel
 from foolbox.criteria import TargetClassProbability
 from foolbox.attacks import LBFGSAttack
+from foolbox.adversarial import Adversarial
 
 
 # *********************** Parse CLI arguments ***********************
@@ -35,6 +39,7 @@ parser.add_argument("-d2", "--demo_all_pixel", action="store_true", help="Demo t
 parser.add_argument("-d3", "--demo_gaussian", action="store_true", help="Demo the gaussian perturbations.");
 parser.add_argument("-d4", "--demo_universal", action="store_true", help="Demo universal perturbations.");
 parser.add_argument("-d5", "--demo_lbfgs", action="store_true", help="Demo LBFGS attack (Szegedy et al. 2013).")
+parser.add_argument("-d6", "--demo_adversarial", action="store_true", help="Demo simple adversarial attack (Berkeley Tutorial).")
 
 # ToDo: Add other perturbation demo options
 
@@ -278,7 +283,8 @@ def perturb_lbfgs(sample, model, data):
     # Based on the tutorial: https://foolbox.readthedocs.io/en/latest/user/tutorial.html
 
     # create model for foolbox
-    foolbox_model = KerasModel(model, (0.0 ,1.0), channel_axis=3)
+    foolbox_model = KerasModel(model, (0.0, 1.0), channel_axis=1)
+    #foolbox_model = TheanoModel(model.input, model.layers[-2].output, (0.0, 1.0), 10, channel_axis=1)
 
     # get correct class
     correct_class = model.predict_classes(sample)
@@ -290,7 +296,7 @@ def perturb_lbfgs(sample, model, data):
     criterion = TargetClassProbability(target_class, p=0.90)
 
     # create attack on model with given criterion
-    attack = LBFGSAttack(foolbox_model, criterion)
+    attack = LBFGSAttack()
 
     #print(sample[0,:,:,:].shape)
 
@@ -302,8 +308,9 @@ def perturb_lbfgs(sample, model, data):
     transformed_sample = np.swapaxes(transformed_sample, 1, 2) # swap channels to axis 2
     # print(sample[0,:,:,:])
     # print(transformed_sample)
+    ad_ins = Adversarial(foolbox_model, criterion, transformed_sample, correct_class)
 
-    adversarial = attack(transformed_sample, label=correct_class)
+    adversarial = attack(ad_ins)
 
     # get class of adversarial example
     pred_class = model.predict_classes(adversarial)
@@ -315,6 +322,95 @@ def perturb_lbfgs(sample, model, data):
 
 def demo_lbfgs(x_test, y_test):
     demo_perturbation(x_test, y_test, perturb_lbfgs, None)
+
+
+# *********************** Old Adversarial perturbations ***********************
+def adv_cost_function_old(perturbation, sample, y_goal, model):
+    # wrongly implemented cost function
+    # reshape input matrix since scipy flattens it
+    perturbation = perturbation.reshape((1,1,28,28))
+
+    # try to minimize the distance between the goal class and the class of the sample plus perturbation
+    return (1/2)*(y_goal**2)-(model.predict_classes(sample + (perturbation-0.5))**2)
+
+
+def perturb_adversarial_old(sample, model, data):
+    # Perturb images using kind of an optimized gaussian? this was a failed implementation
+    # get correct class
+    correct_class = model.predict_classes(sample)
+
+    # set target to be next higher class (and 0 for 9)
+    target_class = (correct_class+5)%10
+
+    # minimize cost
+    start = np.random.normal(.5, .25, (1,1,28,28))
+    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='Nelder-Mead', options={'disp': True})
+
+    adversarial = sample + minimized.x.reshape((1,1,28,28))
+
+    # use this to plot all generated examples (debugging)
+    # plot_adversarial_example(sample[0,0,:,:], adversarial[0,0,:,:])
+
+    # get class of adversarial example
+    pred_class = model.predict_classes(adversarial)
+
+    # print original and detected class
+    print("{} -> {}".format(correct_class, pred_class))
+
+    if pred_class != correct_class:
+        return (1, adversarial)
+
+    return (0, sample)
+
+
+def demo_adversarial_old(x_test, y_test):
+    demo_perturbation(x_test, y_test, perturb_adversarial_old, None)
+
+
+# *********************** Real Adversarial perturbations ***********************
+def adv_cost_function(start, sample, y_goal, model):
+    # cost function from https://ml.berkeley.edu/blog/2018/01/10/adversarial-examples/
+    # reshape input matrix since scipy flattens it
+    start = start.reshape((1,1,28,28))
+
+    goal = np.zeros((10, 1))
+    goal[y_goal] = 1
+
+    # try to minimize: output should be classified as goal class but be close to sample class
+    return (1/2)*((np.linalg.norm(goal - model.predict(start)))**2) + .05 * (np.linalg.norm(start - sample)**2)
+
+
+def perturb_adversarial(sample, model, data):
+    # Perturb images using an attack based on the description at https://ml.berkeley.edu/blog/2018/01/10/adversarial-examples/
+    # get correct class
+    correct_class = model.predict_classes(sample)
+
+    # set target to be next higher class (and 0 for 9)
+    target_class = (correct_class+5)%10
+
+    # minimize cost
+    start = np.random.normal(.5, .3, (1,1,28,28))
+    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True})
+
+    adversarial = minimized.x.reshape((1,1,28,28))
+
+    # use this to plot all generated examples (debugging)
+    # plot_adversarial_example(sample[0,0,:,:], adversarial[0,0,:,:])
+
+    # get class of adversarial example
+    pred_class = model.predict_classes(adversarial)
+
+    # print original and detected class
+    print("{} -> {}".format(correct_class, pred_class))
+    
+    if pred_class != correct_class:
+        return (1, adversarial)
+
+    return (0, sample)
+
+
+def demo_adversarial(x_test, y_test):
+    demo_perturbation(x_test, y_test, perturb_adversarial, None)
 
 
 # Import MNIST data as provided by Keras and reshape for Theano backend
@@ -349,3 +445,6 @@ if args.demo_gaussian:
 
 if args.demo_lbfgs:
     demo_lbfgs(x_test, y_test)
+
+if args.demo_adversarial:
+    demo_adversarial(x_test, y_test)
