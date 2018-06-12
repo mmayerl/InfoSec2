@@ -178,31 +178,31 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
 
         # Step 3: Try to perturb a single pixel in every sample to fool the model
         print("Attempting to perturb those samples ...")
-        for i in range(len(samples)):
-            print("   Sample ", i)
-            success, perturbed_sample = perturb_fn(samples[i], model, data)
+        for j in range(len(samples)):
+            print("   Sample ", j)
+            success, perturbed_sample = perturb_fn(samples[j], model, data)
             successful_perturbs += success
 
             # Save images
             if success == 1:
-                save_image(args.image_folder + str(i) + ".png", samples[i])
-                save_image(args.image_folder + str(i) + "_perturbed.png", perturbed_sample)
+                save_image(args.image_folder + str(j) + ".png", samples[j])
+                save_image(args.image_folder + str(j) + "_perturbed.png", perturbed_sample)
 
-                before_class = model.predict_classes(samples[i])
+                before_class = model.predict_classes(samples[j])
                 after_class = model.predict_classes(perturbed_sample)
                 print(before_class[0], "to", after_class[0])
 
                 # Save if model 1
                 if i == 0:
-                    model1_perturbs.append((samples[i], perturbed_sample))
+                    model1_perturbs.append((samples[j], perturbed_sample))
                 else:
-                    model2_perturbs.append((samples[i], perturbed_sample))
+                    model2_perturbs.append((samples[j], perturbed_sample))
 
-            adversarial[i] = perturbed_sample
+            adversarial[j] = perturbed_sample
 
             # Plot first successful example
             if success == 1 and successful_perturbs == 1:
-                plot_adversarial_example(samples[i][0,0,:,:], adversarial[i][0,0,:,:])
+                plot_adversarial_example(samples[j][0,0,:,:], adversarial[j][0,0,:,:])
 
         # Step 4: Calculate the fooling rate
         fool_rate = successful_perturbs / args.num_samples
