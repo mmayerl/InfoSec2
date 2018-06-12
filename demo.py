@@ -172,7 +172,7 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
                 save_image(args.image_folder + str(i) + ".png", samples[i])
                 save_image(args.image_folder + str(i) + "_perturbed.png", perturbed_sample)
 
-            samples[i] = perturbed_sample
+            adversarial[i] = perturbed_sample
 
             # Plot first successful example
             if success == 1 and successful_perturbs == 1:
