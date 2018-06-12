@@ -404,7 +404,8 @@ def perturb_adversarial(sample, model, data):
     start = np.zeros((1,1,28,28))
     #np.clip(start, 0.0, 1.0)
     #start = sample
-    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True, 'norm': 2, 'eps': 0.025})
+    #minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True, 'norm': 2, 'eps': 0.025})
+    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='L-BFGS-B', options={'disp': False, 'eps': 0.025})
 
     adversarial = minimized.x.reshape((1,1,28,28))
 
