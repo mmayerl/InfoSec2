@@ -134,15 +134,26 @@ def get_n_correct(x_test, y_test, model, n):
 
 # Plot original image, adversarial example and perturbation
 # Taken from the foolbox tutorial: https://foolbox.readthedocs.io/en/latest/user/tutorial.html
-def plot_adversarial_example(image, adversarial):
-    plt.subplot(1, 3, 1)
+def plot_adversarial_example(image, adversarial, additional = None):
+    # set number of columns - default is 3
+    ncols = 3
+
+    # if there is additional stuff to plot add column
+    if additional is not None:
+        ncols += 1
+
+    plt.subplot(1, ncols, 1)
     plt.imshow(image)
 
-    plt.subplot(1, 3, 2)
+    plt.subplot(1, ncols, 2)
     plt.imshow(adversarial)
 
-    plt.subplot(1, 3, 3)
+    plt.subplot(1, ncols, 3)
     plt.imshow(adversarial - image)
+
+    if additional is not None:
+        plt.subplot(1, ncols, 4)
+        plt.imshow(additional)
 
     plt.show()
 
@@ -303,11 +314,8 @@ def perturb_lbfgs(sample, model, data):
     # generate adversarial example
     # sample needs to be transformed from (batchsize, channels, rows, cols) format to (height, width, channels) for
     # foolbox, but that leads to problems with the model
-    transformed_sample = sample[0,:,:,:] # remove batch size
-    transformed_sample = np.swapaxes(transformed_sample, 0, 1) # swap channels to axis 1
-    transformed_sample = np.swapaxes(transformed_sample, 1, 2) # swap channels to axis 2
-    # print(sample[0,:,:,:])
-    # print(transformed_sample)
+    transformed_sample = sample.reshape(28,28,1)
+    # print(transformed_sample.shape)
     ad_ins = Adversarial(foolbox_model, criterion, transformed_sample, correct_class)
 
     adversarial = attack(ad_ins)
@@ -377,7 +385,7 @@ def adv_cost_function(start, sample, y_goal, model):
     goal[y_goal] = 1
 
     # try to minimize: output should be classified as goal class but be close to sample class
-    return (1/2)*((np.linalg.norm(goal - model.predict(start)))**2) + .05 * (np.linalg.norm(start - sample)**2)
+    return 0.5*((np.linalg.norm(goal - model.predict(start)))**2) + .05 * (np.linalg.norm(start - sample)**2)
 
 
 def perturb_adversarial(sample, model, data):
@@ -389,13 +397,23 @@ def perturb_adversarial(sample, model, data):
     target_class = (correct_class+5)%10
 
     # minimize cost
-    start = np.random.normal(.5, .3, (1,1,28,28))
-    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True})
+    start = np.random.normal(.1, .2, (1,1,28,28))
+    np.clip(start, 0.0, 1.0)
+    #start = sample
+    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True, 'norm': 2, 'eps': 0.025})
 
     adversarial = minimized.x.reshape((1,1,28,28))
+    '''
+    # works ok
+    start = np.random.normal(.0, .2, (1,1,28,28))
+    start = start + sample
+    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True, 'norm': 2, 'eps': 0.01})
+
+    adversarial = minimized.x.reshape((1,1,28,28))
+    '''
 
     # use this to plot all generated examples (debugging)
-    # plot_adversarial_example(sample[0,0,:,:], adversarial[0,0,:,:])
+    # plot_adversarial_example(sample[0,0,:,:], adversarial[0,0,:,:], start[0,0,:,:])
 
     # get class of adversarial example
     pred_class = model.predict_classes(adversarial)
