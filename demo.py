@@ -163,9 +163,13 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
     print("Loading models ...")
     K.set_learning_phase(0) # set phase to testing phase - needed for foolbox
     models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
+    model1_perturbs = []
 
-    for model in models:
+    # Try perturbing for both models
+    for i in range(len(models)):
+        model = models[i]
         successful_perturbs = 0.0
+
         # Step 2: Get random correctly classified samples
         print("Drawing samples for correctly classified instances ...")
         samples = get_n_correct(x_test, y_test, model, args.num_samples)
@@ -187,6 +191,10 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
                 after_class = model.predict_classes(perturbed_sample)
                 print(before_class[0], "to", after_class[0])
 
+                # Save if model 1
+                if i == 0:
+                    model1_perturbs.append((samples[i], perturbed_sample))
+
             adversarial[i] = perturbed_sample
 
             # Plot first successful example
@@ -197,6 +205,17 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
         fool_rate = successful_perturbs / args.num_samples
         print("Achieved fooling rate: ", fool_rate)
 
+    # Check if perturbations for model 1 also work for model 2
+    successful_transfers = 0
+    for image in model1_perturbs:
+        original_class = models[1].predict_classes(image[0])
+        perturbed_class = models[1].predict_classes(image[1])
+
+        if original_class != perturbed_class:
+            successful_transfers += 1
+
+    print("Successful transfer rate from network 1 adversaries to network 2: ", successful_transfers / args.num_samples)
+    
 
 # *********************** Single pixel perturbations ***********************
 def perturb_single_pixel(sample, model, data):
