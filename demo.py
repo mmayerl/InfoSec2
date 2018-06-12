@@ -397,8 +397,9 @@ def perturb_adversarial(sample, model, data):
     target_class = (correct_class+5)%10
 
     # minimize cost
-    start = np.random.normal(.1, .2, (1,1,28,28))
-    np.clip(start, 0.0, 1.0)
+    #start = np.random.normal(.1, .2, (1,1,28,28))
+    start = np.zeros((1,1,28,28))
+    #np.clip(start, 0.0, 1.0)
     #start = sample
     minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True, 'norm': 2, 'eps': 0.025})
 
