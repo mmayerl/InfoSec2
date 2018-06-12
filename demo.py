@@ -164,6 +164,7 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
     K.set_learning_phase(0) # set phase to testing phase - needed for foolbox
     models = [ load_model(args.in_cnn1), load_model(args.in_cnn2) ]
     model1_perturbs = []
+    model2_perturbs = []
 
     # Try perturbing for both models
     for i in range(len(models)):
@@ -194,6 +195,8 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
                 # Save if model 1
                 if i == 0:
                     model1_perturbs.append((samples[i], perturbed_sample))
+                else:
+                    model2_perturbs.append((samples[i], perturbed_sample))
 
             adversarial[i] = perturbed_sample
 
@@ -214,7 +217,17 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
         if original_class != perturbed_class:
             successful_transfers += 1
 
-    print("Successful transfer rate from network 1 adversaries to network 2: ", successful_transfers / args.num_samples)
+    print("Successful transfer rate from network 1 adversaries to network 2: ", successful_transfers / len(model1_perturbs))
+
+    successful_transfers = 0
+    for image in model2_perturbs:
+        original_class = models[0].predict_classes(image[0])
+        perturbed_class = models[0].predict_classes(image[1])
+
+        if original_class != perturbed_class:
+            successful_transfers += 1
+
+    print("Successful transfer rate from network 2 adversaries to network 1: ", successful_transfers / len(model2_perturbs))
     
 
 # *********************** Single pixel perturbations ***********************
