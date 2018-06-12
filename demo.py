@@ -58,7 +58,7 @@ args = parser.parse_args()
 # *********************** Train ***********************
 def train_models(x_train, y_train):
     # Build first model (CNN)
-    # Source: ########
+    # Source: https://elitedatascience.com/keras-tutorial-deep-learning-in-python
     print("Training first CNN model ...")
     model_cnn1 = Sequential()
     model_cnn1.add(Conv2D(32, (3, 3), activation="relu", input_shape=(1,28,28)))
@@ -182,6 +182,10 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
             if success == 1:
                 save_image(args.image_folder + str(i) + ".png", samples[i])
                 save_image(args.image_folder + str(i) + "_perturbed.png", perturbed_sample)
+
+                before_class = model.predict_classes(samples[i])
+                after_class = model.predict_classes(perturbed_sample)
+                print(before_class[0], "to", after_class[0])
 
             adversarial[i] = perturbed_sample
 
@@ -315,7 +319,6 @@ def perturb_lbfgs(sample, model, data):
     # sample needs to be transformed from (batchsize, channels, rows, cols) format to (height, width, channels) for
     # foolbox, but that leads to problems with the model
     transformed_sample = sample.reshape(28,28,1)
-    # print(transformed_sample.shape)
     ad_ins = Adversarial(foolbox_model, criterion, transformed_sample, correct_class)
 
     adversarial = attack(ad_ins)
@@ -404,6 +407,7 @@ def perturb_adversarial(sample, model, data):
     minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True, 'norm': 2, 'eps': 0.025})
 
     adversarial = minimized.x.reshape((1,1,28,28))
+
     '''
     # works ok
     start = np.random.normal(.0, .2, (1,1,28,28))
