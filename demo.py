@@ -429,7 +429,7 @@ def adv_cost_function(start, sample, y_goal, model):
     goal[y_goal] = 1
 
     # try to minimize: output should be classified as goal class but be close to sample class
-    return 0.5*((np.linalg.norm(goal - model.predict(start)))**2) + .05 * (np.linalg.norm(start - sample)**2)
+    return .5 * (np.linalg.norm(goal - model.predict(start))**2) + .05 * (np.linalg.norm(start - sample)**2)
 
 
 def perturb_adversarial(sample, model, data):
@@ -448,7 +448,7 @@ def perturb_adversarial(sample, model, data):
     # np.clip(start, 0.0, 1.0)
     # start = sample
     # minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True, 'norm': 2, 'eps': 0.025})
-    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='L-BFGS-B', bounds=Bounds(lower_bound,upper_bound), options={'disp': True, 'eps': 0.025, 'maxfun': 30000, 'maxiter': 30000})
+    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='L-BFGS-B', bounds=Bounds(lower_bound,upper_bound), options={'disp': False, 'eps': 0.025, 'maxfun': 30000, 'maxiter': 30000})
 
     adversarial = minimized.x.reshape((1,1,28,28))
 
