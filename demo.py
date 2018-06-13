@@ -168,6 +168,9 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
 
     # Try perturbing for both models
     for i in range(len(models)):
+        # use this to skip a model
+        # if i == 1:
+            # continue
         model = models[i]
         successful_perturbs = 0.0
 
@@ -176,7 +179,7 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
         samples = get_n_correct(x_test, y_test, model, args.num_samples)
         adversarial = samples[:]
 
-        # Step 3: Try to perturb a single pixel in every sample to fool the model
+        # Step 3: Try to perturb every sample to fool the model
         print("Attempting to perturb those samples ...")
         for j in range(len(samples)):
             print("   Sample ", j)
@@ -210,24 +213,30 @@ def demo_perturbation(x_test, y_test, perturb_fn, data):
 
     # Check if perturbations for model 1 also work for model 2
     successful_transfers = 0
-    for image in model1_perturbs:
-        original_class = models[1].predict_classes(image[0])
-        perturbed_class = models[1].predict_classes(image[1])
+    if len(model1_perturbs) > 0:
+        for image in model1_perturbs:
+            original_class = models[1].predict_classes(image[0])
+            perturbed_class = models[1].predict_classes(image[1])
 
-        if original_class != perturbed_class:
-            successful_transfers += 1
+            if original_class != perturbed_class:
+                successful_transfers += 1
 
-    print("Successful transfer rate from network 1 adversaries to network 2: ", successful_transfers / len(model1_perturbs))
+        print("Successful transfer rate from network 1 adversaries to network 2: ", successful_transfers / len(model1_perturbs))
+    else:
+        print("No successful examples on network 1")
 
     successful_transfers = 0
-    for image in model2_perturbs:
-        original_class = models[0].predict_classes(image[0])
-        perturbed_class = models[0].predict_classes(image[1])
+    if len(model2_perturbs) > 0:
+        for image in model2_perturbs:
+            original_class = models[0].predict_classes(image[0])
+            perturbed_class = models[0].predict_classes(image[1])
 
-        if original_class != perturbed_class:
-            successful_transfers += 1
+            if original_class != perturbed_class:
+                successful_transfers += 1
 
-    print("Successful transfer rate from network 2 adversaries to network 1: ", successful_transfers / len(model2_perturbs))
+        print("Successful transfer rate from network 2 adversaries to network 1: ", successful_transfers / len(model2_perturbs))
+    else:
+        print("No successful examples on network 2")
     
 
 # *********************** Single pixel perturbations ***********************
@@ -428,16 +437,18 @@ def perturb_adversarial(sample, model, data):
     # get correct class
     correct_class = model.predict_classes(sample)
 
-    # set target to be next higher class (and 0 for 9)
+    # set target to be class+5 mod 10
     target_class = (correct_class+5)%10
 
     # minimize cost
-    #start = np.random.normal(.1, .2, (1,1,28,28))
+    # start = np.random.normal(.05, .05, (1,1,28,28))
     start = np.zeros((1,1,28,28))
-    #np.clip(start, 0.0, 1.0)
-    #start = sample
-    #minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True, 'norm': 2, 'eps': 0.025})
-    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='L-BFGS-B', options={'disp': False, 'eps': 0.025})
+    lower_bound = np.zeros((784))
+    upper_bound = np.ones((784))
+    # np.clip(start, 0.0, 1.0)
+    # start = sample
+    # minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='BFGS', options={'disp': True, 'norm': 2, 'eps': 0.025})
+    minimized = minimize(adv_cost_function, start, args=(sample, target_class, model), method='L-BFGS-B', bounds=Bounds(lower_bound,upper_bound), options={'disp': True, 'eps': 0.025, 'maxfun': 30000, 'maxiter': 30000})
 
     adversarial = minimized.x.reshape((1,1,28,28))
 
